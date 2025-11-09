@@ -1,5 +1,6 @@
-from editor import create_file, read_file, write_file
+from editor import read_file, write_file
 import encryption
+import os
 
 
 def multiline_input():
@@ -15,38 +16,43 @@ def multiline_input():
 
 def open_file():
     name = input("Enter filename to open: ").strip()
-    try:
-        data = read_file(name)
-    except FileNotFoundError:
+    if not os.path.exists(name):
         print(" File not found.")
-        return None, None
+        return None, None, False, False
+
+    data = read_file(name)
+    is_new = False  
 
     if encryption.is_encrypted(data):
-        print("[!] File is encrypted.")
+        print(" File is encrypted.")
         pwd = input("Enter password to decrypt: ")
         try:
             data = encryption.decrypt_text(data, pwd)
-            print("🔓 Decryption successful.")
         except ValueError as e:
-            print(f"❌ {e}")
-            return None, None
+            print(f" {e}")
+            return None, None, False, False
+        print(" Decryption successful.")
     else:
         print(" File opened successfully.")
 
     print("\n--- File Content ---")
     print(data if data else "[empty]")
     print("--------------------")
-    return name, data
+    return name, data, is_new, False
+
+
+def ensure_filename(name):
+    if not name:
+        name = input("Enter filename: ").strip()
+    return name
 
 
 def edit_content(name, content):
-    
-    if not name:
-        name = input("Enter filename to edit: ").strip()
+    name = ensure_filename(name)
     if content is None:
         content = ""
 
-    changed = False  
+    changed = False
 
     while True:
         print(f"\nEditing: {name}")
@@ -74,34 +80,26 @@ def edit_content(name, content):
             print(content if content else "[empty]")
             print("------------------------")
         elif choice == "5":
-            if changed:
-                print(" Note: You have unsaved changes.")
-            else:
-                print("No changes made.")
             return name, content, changed
         else:
             print("Invalid choice. Try again.")
 
 
-def save_file(name, content):
-    """Save content with optional encryption and overwrite confirmation."""
+def save_file(name, content, is_new_file):
     if content is None:
-        print("❌ Nothing to save.")
-        return name, content, False
+        print(" Nothing to save.")
+        return name, content, is_new_file
 
-    if not name:
-        name = input("Enter filename to save as: ").strip()
+    name = ensure_filename(name)
 
-    
-    import os
-    if os.path.exists(name):
+ 
+    if not is_new_file and os.path.exists(name):
         confirm = input(f" File '{name}' exists. Overwrite? (y/n): ").strip().lower()
         if confirm != "y":
             print(" Save cancelled.")
-            return name, content, True  
+            return name, content, is_new_file
 
     encrypt_choice = input("Encrypt before saving? (y/n): ").strip().lower()
-
     if encrypt_choice == "y":
         pwd = input("Enter password for encryption: ")
         data = encryption.encrypt_text(content, pwd)
@@ -109,14 +107,15 @@ def save_file(name, content):
         data = content
 
     write_file(name, data)
-    print(f" File saved successfully as '{name}'.")
+    print(f"  File saved successfully as '{name}'.")
     return name, data, False  
 
 
 def main():
     filename = None
     content = None
-    unsaved = False  
+    is_new_file = False
+    unsaved = False
 
     while True:
         print("\n=== Secure Text Editor ===")
@@ -130,18 +129,14 @@ def main():
         choice = input("Enter choice: ").strip()
 
         if choice == "1":
-            name = input("Enter new filename: ").strip()
-            try:
-                create_file(name)
-                print("File created.")
-                filename, content, unsaved = name, "", False
-            except FileExistsError:
-                print(" File already exists.")
+            filename = input("Enter new filename: ").strip()
+            content = ""
+            is_new_file = True
+            unsaved = True
+            print("  New file created (not saved yet).")
 
         elif choice == "2":
-            name, data = open_file()
-            if name:
-                filename, content, unsaved = name, data, False
+            filename, content, is_new_file, unsaved = open_file()
 
         elif choice == "3":
             filename, content, changed = edit_content(filename, content)
@@ -149,9 +144,11 @@ def main():
                 unsaved = True
 
         elif choice == "4":
-            filename, content, unsaved = save_file(filename, content)
+            filename, content, is_new_file = save_file(filename, content, is_new_file)
+            unsaved = False
 
         elif choice == "5":
+            filename = ensure_filename(filename)
             print("\n--- Current Content ---")
             print(content if content else "[empty]")
             print("-----------------------")
@@ -160,8 +157,8 @@ def main():
             if unsaved:
                 confirm = input(" You have unsaved changes. Save before exit? (y/n): ").strip().lower()
                 if confirm == "y":
-                    filename, content, unsaved = save_file(filename, content)
-            print(" Goodbye!")
+                    filename, content, is_new_file = save_file(filename, content, is_new_file)
+            print("  Goodbye!")
             break
 
         else:
@@ -170,3 +167,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
