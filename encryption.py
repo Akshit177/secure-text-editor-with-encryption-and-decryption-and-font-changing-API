@@ -47,3 +47,4 @@ def decrypt_text(data, password):
 
     shift = _shift_from_password(password)
     return _caesar_cipher(encrypted, -shift)
+
