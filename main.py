@@ -1,10 +1,14 @@
-from editor import read_file, write_file
-import encryption
 import os
+from editor import (
+    read_file, write_file, create_file,
+    delete_file, delete_content
+)
+import encryption
+from font_api import convert_style
 
 
 def multiline_input():
-    print("Enter text (type ':wq' on a new line to finish):")
+    print("Enter text (type ':wq' to finish):")
     lines = []
     while True:
         line = input()
@@ -15,30 +19,32 @@ def multiline_input():
 
 
 def open_file():
-    name = input("Enter filename to open: ").strip()
-    if not os.path.exists(name):
-        print(" File not found.")
+    filename = input("Enter filename to open: ").strip()
+    if not os.path.exists(filename):
+        print("File not found.")
         return None, None, False, False
 
-    data = read_file(name)
-    is_new = False  
+    raw_data = read_file(filename)
+    is_new = False
 
-    if encryption.is_encrypted(data):
-        print(" File is encrypted.")
-        pwd = input("Enter password to decrypt: ")
+    if encryption.is_encrypted(raw_data):
+        print("This file is encrypted.")
+        pwd = input("Enter password: ")
         try:
-            data = encryption.decrypt_text(data, pwd)
+            data = encryption.decrypt_text(raw_data, pwd)
+            print("Decryption successful.")
         except ValueError as e:
-            print(f" {e}")
+            print(e)
             return None, None, False, False
-        print(" Decryption successful.")
     else:
-        print(" File opened successfully.")
+        data = raw_data
+        print("File opened successfully.")
 
     print("\n--- File Content ---")
     print(data if data else "[empty]")
     print("--------------------")
-    return name, data, is_new, False
+
+    return filename, data, is_new, False
 
 
 def ensure_filename(name):
@@ -47,122 +53,171 @@ def ensure_filename(name):
     return name
 
 
-def edit_content(name, content):
-    name = ensure_filename(name)
+def edit_content(filename, content):
+    filename = ensure_filename(filename)
     if content is None:
         content = ""
 
+    plain = content
+    styled = content
     changed = False
 
     while True:
-        print(f"\nEditing: {name}")
+        print(f"\nEditing: {filename}")
         print("1. Replace entire content")
-        print("2. Append to content")
-        print("3. Find & Replace text")
-        print("4. Show current content")
-        print("5. Finish editing")
-        choice = input("Choice: ").strip()
+        print("2. Append text")
+        print("3. Find & Replace")
+        print("4. Show content")
+        print("5. Apply Font Style (preview only)")
+        print("6. Finish Editing")
+        choice = input("Choice: ")
 
         if choice == "1":
-            content = multiline_input()
+            plain = multiline_input()
+            styled = plain
             changed = True
+
         elif choice == "2":
-            content += ("\n" if content else "") + multiline_input()
+            add = multiline_input()
+            plain += ("\n" if plain else "") + add
+            styled = plain
             changed = True
+
         elif choice == "3":
-            find = input("Text to find: ")
+            find = input("Find: ")
             repl = input("Replace with: ")
-            content = content.replace(find, repl)
-            print(" Find & Replace done.")
+            plain = plain.replace(find, repl)
+            styled = plain
             changed = True
+
         elif choice == "4":
             print("\n--- Current Content ---")
-            print(content if content else "[empty]")
+            print(styled if styled else "[empty]")
             print("------------------------")
+
         elif choice == "5":
-            return name, content, changed
+            print("⚠ WARNING: If you encrypt AFTER applying a font style except lower and uppercase, your original plain text may be lost!")
+            print("Styles: calligraphy, italic, bold, uppercase, lowercase")
+            style = input("Enter style: ").lower().strip()
+
+            try:
+                styled = convert_style(plain, style)
+                print(f"Applied {style} style (preview).")
+            except ValueError as e:
+                print(e)
+
+        elif choice == "6":
+            return filename, plain, styled, changed
+
         else:
-            print("Invalid choice. Try again.")
+            print("Invalid choice.")
 
 
-def save_file(name, content, is_new_file):
-    if content is None:
-        print(" Nothing to save.")
-        return name, content, is_new_file
+def save_file(filename, plain, styled, is_new):
+    filename = ensure_filename(filename)
 
-    name = ensure_filename(name)
+    print("\nChoose save format:")
+    print("1. Save plain text")
+    print("2. Save styled text")
+    print("3. Encrypt plain text")
+    print("4. Encrypt styled text")
+    choice = input("Enter choice: ")
 
- 
-    if not is_new_file and os.path.exists(name):
-        confirm = input(f" File '{name}' exists. Overwrite? (y/n): ").strip().lower()
-        if confirm != "y":
-            print(" Save cancelled.")
-            return name, content, is_new_file
+    if choice == "1":
+        content = plain
 
-    encrypt_choice = input("Encrypt before saving? (y/n): ").strip().lower()
-    if encrypt_choice == "y":
-        pwd = input("Enter password for encryption: ")
-        data = encryption.encrypt_text(content, pwd)
+    elif choice == "2":
+        content = styled
+
+    elif choice == "3":
+        pwd = input("Enter password: ")
+        content = encryption.encrypt_text(plain, pwd)
+
+    elif choice == "4":
+        pwd = input("Enter password: ")
+        content = encryption.encrypt_text(styled, pwd)
+
     else:
-        data = content
+        print("Invalid choice — saving plain text by default.")
+        content = plain
 
-    write_file(name, data)
-    print(f"  File saved successfully as '{name}'.")
-    return name, data, False  
+    write_file(filename, content)
+    print("File saved.")
+    return filename, content, False
 
 
 def main():
     filename = None
-    content = None
+    plain_content = None
+    styled_content = None
     is_new_file = False
     unsaved = False
 
     while True:
-        print("\n=== Secure Text Editor ===")
+        print("\n=== Secure Editor ===")
         print("1. Create New File")
         print("2. Open File")
         print("3. Edit File")
         print("4. Save File")
         print("5. Show Current Content")
-        print("6. Exit")
+        print("6. Delete File")
+        print("7. Delete Content Only")
+        print("8. Exit")
 
-        choice = input("Enter choice: ").strip()
+        choice = input("Enter choice: ")
 
         if choice == "1":
-            filename = input("Enter new filename: ").strip()
-            content = ""
+            filename = input("Enter filename: ").strip()
+            create_file(filename)
+            plain_content = ""
+            styled_content = ""
             is_new_file = True
             unsaved = True
-            print("  New file created (not saved yet).")
 
         elif choice == "2":
-            filename, content, is_new_file, unsaved = open_file()
+            filename, data, is_new_file, unsaved = open_file()
+            plain_content = data
+            styled_content = data
 
         elif choice == "3":
-            filename, content, changed = edit_content(filename, content)
+            filename, plain_content, styled_content, changed = edit_content(filename, plain_content)
             if changed:
                 unsaved = True
 
         elif choice == "4":
-            filename, content, is_new_file = save_file(filename, content, is_new_file)
+            filename, saved, is_new_file = save_file(filename, plain_content, styled_content, is_new_file)
             unsaved = False
 
         elif choice == "5":
-            filename = ensure_filename(filename)
-            print("\n--- Current Content ---")
-            print(content if content else "[empty]")
-            print("-----------------------")
+            print("\n--- Current Styled Content ---")
+            print(styled_content if styled_content else "[empty]")
+            print("-------------------------------")
 
         elif choice == "6":
+            filename = ensure_filename(filename)
+            delete_file(filename)
+            filename = None
+            plain_content = None
+            styled_content = None
+            unsaved = False
+
+        elif choice == "7":
+            filename = ensure_filename(filename)
+            delete_content(filename)
+            plain_content = ""
+            styled_content = ""
+            unsaved = False
+
+        elif choice == "8":
             if unsaved:
-                confirm = input(" You have unsaved changes. Save before exit? (y/n): ").strip().lower()
-                if confirm == "y":
-                    filename, content, is_new_file = save_file(filename, content, is_new_file)
-            print("  Goodbye!")
+                save = input("Unsaved changes. Save? (y/n): ")
+                if save == "y":
+                    filename, saved, is_new_file = save_file(filename, plain_content, styled_content, is_new_file)
+            print("Thank you!")
             break
 
         else:
-            print("Invalid choice. Try again.")
+            print("Invalid choice.")
 
 
 if __name__ == "__main__":
